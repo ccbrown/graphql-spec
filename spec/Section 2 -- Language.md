@@ -7,16 +7,50 @@ common unit of composition allowing for query reuse.
 
 A GraphQL document is defined as a syntactic grammar where terminal symbols are
 tokens (indivisible lexical units). These tokens are defined in a lexical
-grammar which matches patterns of source characters (defined by a
-double-colon `::`).
+grammar which matches patterns of source characters. In this document, syntactic
+grammar productions are distinguished with a colon `:` while lexical grammar
+productions are distinguished with a double-colon `::`.
 
-Note: See [Appendix A](#sec-Appendix-Notation-Conventions) for more details about the definition of lexical and syntactic grammar and other notational conventions
-used in this document.
+The source text of a GraphQL document must be a sequence of {SourceCharacter}.
+The character sequence must be described by a sequence of {Token} and {Ignored}
+lexical grammars. The lexical token sequence, omitting {Ignored}, must be
+described by a single {Document} syntactic grammar.
+
+Note: See [Appendix A](#sec-Appendix-Notation-Conventions) for more information
+about the lexical and syntactic grammar and other notational conventions used
+throughout this document.
+
+**Lexical Analysis & Syntactic Parse**
+
+The source text of a GraphQL document is first converted into a sequence of
+lexical tokens, {Token}, and ignored tokens, {Ignored}. The source text is
+scanned from left to right, repeatedly taking the next possible sequence of
+code-points allowed by the lexical grammar productions as the next token. This
+sequence of lexical tokens are then scanned from left to right to produce an
+abstract syntax tree (AST) according to the {Document} syntactical grammar.
+
+Lexical grammar productions in this document use *lookahead restrictions* to
+remove ambiguity and ensure a single valid lexical analysis. A lexical token is
+only valid if not followed by a character in its lookahead restriction.
+
+For example, an {IntValue} has the restriction {[lookahead != Digit]}, so cannot
+be followed by a {Digit}. Because of this, the sequence `123` cannot represent
+as the tokens (`12`, `3`) since `12` is followed by the {Digit} `3` and so must
+only represent a single token. Use {WhiteSpace} or other {Ignored} between
+characters to represent multiple tokens.
+
+Note: This typically has the same behavior as a
+"[maximal munch](https://en.wikipedia.org/wiki/Maximal_munch)" longest possible
+match, however some lookahead restrictions include additional constraints.
 
 
 ## Source Text
 
-SourceCharacter :: /[\u0009\u000A\u000D\u0020-\uFFFF]/
+SourceCharacter ::
+  - "U+0009"
+  - "U+000A"
+  - "U+000D"
+  - "U+0020–U+FFFF"
 
 GraphQL documents are expressed as a sequence of
 [Unicode](https://unicode.org/standard/standard.html) characters. However, with
@@ -60,7 +94,7 @@ control tools.
 
 LineTerminator ::
   - "New Line (U+000A)"
-  - "Carriage Return (U+000D)" [ lookahead ! "New Line (U+000A)" ]
+  - "Carriage Return (U+000D)" [lookahead != "New Line (U+000A)"]
   - "Carriage Return (U+000D)" "New Line (U+000A)"
 
 Like white space, line terminators are used to improve the legibility of source
@@ -75,7 +109,7 @@ the line number.
 
 ### Comments
 
-Comment :: `#` CommentChar*
+Comment :: `#` CommentChar* [lookahead != CommentChar]
 
 CommentChar :: SourceCharacter but not LineTerminator
 
@@ -118,8 +152,7 @@ Token ::
 A GraphQL document is comprised of several kinds of indivisible lexical tokens
 defined here in a lexical grammar by patterns of source Unicode characters.
 
-Tokens are later used as terminal symbols in a GraphQL Document
-syntactic grammars.
+Tokens are later used as terminal symbols in GraphQL syntactic grammar rules.
 
 
 ### Ignored Tokens
@@ -131,15 +164,16 @@ Ignored ::
   - Comment
   - Comma
 
-Before and after every lexical token may be any amount of ignored tokens
-including {WhiteSpace} and {Comment}. No ignored regions of a source
-document are significant, however ignored source characters may appear within
-a lexical token in a significant way, for example a {String} may contain white
-space characters.
+{Ignored} tokens are used to improve readability and provide separation between
+{Token}, but are otherwise insignificant and not referenced in syntactical
+grammar productions.
 
-No characters are ignored while parsing a given token, as an example no
-white space characters are permitted between the characters defining a
-{FloatValue}.
+Any amount of {Ignored} may appear before and after every lexical token. No
+ignored regions of a source document are significant, however ignored source
+characters may appear within a lexical token in a significant way, for example a
+{String} may contain white space characters. No characters are ignored within a
+{Token}, as an example no white space characters are permitted between the
+characters defining a {FloatValue}.
 
 
 ### Punctuators
@@ -153,7 +187,26 @@ lacks the punctuation often used to describe mathematical expressions.
 
 ### Names
 
-Name :: /[_A-Za-z][_0-9A-Za-z]*/
+Name ::
+  - NameStart NameContinue* [lookahead != NameContinue]
+
+NameStart ::
+  - Letter
+  - `_`
+
+NameContinue ::
+  - Letter
+  - Digit
+  - `_`
+
+Letter :: one of
+  `A` `B` `C` `D` `E` `F` `G` `H` `I` `J` `K` `L` `M`
+  `N` `O` `P` `Q` `R` `S` `T` `U` `V` `W` `X` `Y` `Z`
+  `a` `b` `c` `d` `e` `f` `g` `h` `i` `j` `k` `l` `m`
+  `n` `o` `p` `q` `r` `s` `t` `u` `v` `w` `x` `y` `z`
+
+Digit :: one of
+  `0` `1` `2` `3` `4` `5` `6` `7` `8` `9`
 
 GraphQL Documents are full of named things: operations, fields, arguments,
 types, directives, fragments, and variables. All names must follow the same
@@ -163,8 +216,9 @@ Names in GraphQL are case-sensitive. That is to say `name`, `Name`, and `NAME`
 all refer to different names. Underscores are significant, which means
 `other_name` and `othername` are two different names.
 
-Names in GraphQL are limited to this <acronym>ASCII</acronym> subset of possible
-characters to support interoperation with as many other systems as possible.
+Note: Names in GraphQL are limited to the Latin <acronym>ASCII</acronym> subset
+of possible Source Characters in order to support interoperation with as many
+other systems as possible.
 
 
 ## Document
@@ -666,7 +720,7 @@ specified as a variable. List and inputs objects may also contain variables (unl
 
 ### Int Value
 
-IntValue :: IntegerPart
+IntValue :: IntegerPart [lookahead != {Digit, `.`}]
 
 IntegerPart ::
   - NegativeSign? 0
@@ -674,19 +728,20 @@ IntegerPart ::
 
 NegativeSign :: -
 
-Digit :: one of 0 1 2 3 4 5 6 7 8 9
-
 NonZeroDigit :: Digit but not `0`
 
 An Int number is specified without a decimal point or exponent (ex. `1`).
+
+An {IntValue} must not be followed by a {`.`}. If a {`.`} follows the token must
+only be interpreted as a {FloatValue}.
 
 
 ### Float Value
 
 FloatValue ::
-  - IntegerPart FractionalPart
-  - IntegerPart ExponentPart
-  - IntegerPart FractionalPart ExponentPart
+  - IntegerPart FractionalPart ExponentPart [lookahead != Digit]
+  - IntegerPart FractionalPart [lookahead != Digit]
+  - IntegerPart ExponentPart [lookahead != Digit]
 
 FractionalPart :: . Digit+
 
@@ -710,7 +765,8 @@ The two keywords `true` and `false` represent the two boolean values.
 ### String Value
 
 StringValue ::
-  - `"` StringCharacter* `"`
+  - `""` [lookahead != `"`]
+  - `"` StringCharacter+ `"`
   - `"""` BlockStringCharacter* `"""`
 
 StringCharacter ::
