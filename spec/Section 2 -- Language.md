@@ -720,7 +720,7 @@ specified as a variable. List and inputs objects may also contain variables (unl
 
 ### Int Value
 
-IntValue :: IntegerPart [lookahead != {Digit, `.`}]
+IntValue :: IntegerPart [lookahead != {Digit, NameStart, `.`}]
 
 IntegerPart ::
   - NegativeSign? 0
@@ -732,16 +732,18 @@ NonZeroDigit :: Digit but not `0`
 
 An Int number is specified without a decimal point or exponent (ex. `1`).
 
-An {IntValue} must not be followed by a {`.`}. If a {`.`} follows the token must
-only be interpreted as a {FloatValue}.
+An {IntValue} must not be followed by a {`.`} or {NameStart}. If a {`.`}, {`e`},
+or {`E`} follows the token must only be interpreted as a {FloatValue}.
+No other letter can follow. For example the sequence `0x123` has no valid
+lexical representation.
 
 
 ### Float Value
 
 FloatValue ::
-  - IntegerPart FractionalPart ExponentPart [lookahead != Digit]
-  - IntegerPart FractionalPart [lookahead != Digit]
-  - IntegerPart ExponentPart [lookahead != Digit]
+  - IntegerPart FractionalPart ExponentPart [lookahead != {Digit, NameStart}]
+  - IntegerPart FractionalPart [lookahead != {Digit, NameStart}]
+  - IntegerPart ExponentPart [lookahead != {Digit, NameStart}]
 
 FractionalPart :: . Digit+
 
@@ -753,6 +755,9 @@ Sign :: one of + -
 
 A Float number includes either a decimal point (ex. `1.0`) or an exponent
 (ex. `1e50`) or both (ex. `6.0221413e23`).
+
+A {FloatValue} must not be followed by a {NameStart}. For example the sequence
+`0x1.2p3` has no valid lexical representation.
 
 
 ### Boolean Value
